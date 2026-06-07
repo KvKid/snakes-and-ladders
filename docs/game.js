@@ -52,6 +52,7 @@ document.getElementById('start-btn').addEventListener('click', () => {
   document.getElementById('game-screen').classList.add('active');
 
   buildBoard();
+  const boardEl=document.getElementById("board"); const svg=document.getElementById("overlay"); const sz=boardEl.offsetWidth; svg.setAttribute("width",sz); svg.setAttribute("height",sz);
   drawConnections();
   initTokens();
   updatePanel();
@@ -68,10 +69,8 @@ function squareToGrid(sq) {
   return { gridCol: col + 1, gridRow: 10 - row };
 }
 
-function squareToCentre(sq) {
-  const { gridCol, gridRow } = squareToGrid(sq);
-  return { x: (gridCol - 0.5) * 56, y: (gridRow - 0.5) * 56 };
-}
+function getCellSize() { return document.getElementById("sq-1") ? document.getElementById("sq-1").offsetWidth : 56; }
+function squareToCentre(sq) { const {gridCol,gridRow}=squareToGrid(sq); const cs=getCellSize(); return {x:(gridCol-0.5)*cs, y:(gridRow-0.5)*cs}; }
 
 function drawConnections() {
   const svg = document.getElementById('overlay');
@@ -330,3 +329,5 @@ function showWin(winner) {
   });
   document.getElementById('win-overlay').classList.remove('hidden');
 }
+
+window.addEventListener("resize",()=>{ if(state.phase!=="playing")return; const sz=document.getElementById("board").offsetWidth; const svg=document.getElementById("overlay"); svg.setAttribute("width",sz); svg.setAttribute("height",sz); drawConnections(); state.names.forEach((_,i)=>positionToken(i)); });

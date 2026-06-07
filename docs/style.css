@@ -19,7 +19,8 @@ body {
   background: #16213e;
   border-radius: 16px;
   padding: 40px;
-  width: 360px;
+  width: 90%;
+  max-width: 360px;
   text-align: center;
   box-shadow: 0 8px 32px rgba(0,0,0,0.4);
 }
@@ -60,15 +61,16 @@ body {
   flex-shrink: 0;
 }
 #board {
+  --cell-size: 56px;
   display: grid;
-  grid-template-columns: repeat(10, 56px);
-  grid-template-rows: repeat(10, 56px);
+  grid-template-columns: repeat(10, var(--cell-size));
+  grid-template-rows: repeat(10, var(--cell-size));
   border: 2px solid #333;
   border-radius: 8px;
   overflow: hidden;
 }
 .cell {
-  width: 56px; height: 56px;
+  width: var(--cell-size); height: var(--cell-size);
   border: 1px solid #2a2a4a;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
@@ -169,3 +171,14 @@ body {
 }
 #summary-table th { color: #888; font-weight: normal; font-size: 0.85rem; text-transform: uppercase; }
 #summary-table .winner-row td { color: #ffd700; font-weight: bold; }
+
+@media (max-width: 700px) {
+  #board { --cell-size: clamp(32px, 8vw, 52px); }
+  #game-layout { flex-direction: column; align-items: center; }
+  #panel { width: 100%; max-width: 560px; }
+}
+
+@media (max-width: 420px) {
+  #board { --cell-size: clamp(26px, 7.5vw, 34px); }
+  .cell .sq-num { font-size: 0.4rem; }
+}
