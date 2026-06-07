@@ -4,6 +4,24 @@ const PLAYER_COLOURS = ['#00bcd4', '#ffeb3b', '#e040fb', '#42a5f5'];
 const PLAYER_SYMBOLS = ['●', '■', '▲', '◆'];
 const DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let _audioCtx = null;
+function getAudioCtx() { if(!_audioCtx) _audioCtx = new AudioCtx(); return _audioCtx; }
+function playTone(freq, type, dur, vol, delay) {
+  try {
+    const ctx=getAudioCtx(), osc=ctx.createOscillator(), gain=ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type=type; osc.frequency.setValueAtTime(freq,ctx.currentTime+(delay||0));
+    gain.gain.setValueAtTime(vol||0.25,ctx.currentTime+(delay||0));
+    gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+(delay||0)+dur);
+    osc.start(ctx.currentTime+(delay||0)); osc.stop(ctx.currentTime+(delay||0)+dur);
+  } catch(e) {}
+}
+function soundDiceRoll() { playTone(300,'square',0.06,0.12); playTone(450,'square',0.06,0.10,0.07); playTone(200,'square',0.06,0.08,0.14); }
+function soundSnake() { [440,392,349,311,277].forEach((f,i)=>playTone(f,'sawtooth',0.12,0.18,i*0.09)); }
+function soundLadder() { [261,329,392,523].forEach((f,i)=>playTone(f,'sine',0.18,0.22,i*0.09)); }
+function soundWin() { [523,659,784,1047,1568].forEach((f,i)=>playTone(f,'sine',0.35,0.3,i*0.12)); }
+
 const state = {
   names: [],
   positions: {},
@@ -237,6 +255,7 @@ function movePlayer(position, roll) {
 document.getElementById('roll-btn').addEventListener('click', handleRoll);
 
 function animateDice(finalFace, callback) {
+  soundDiceRoll();
   const el = document.getElementById("dice-result");
   const faces = ["⚀","⚁","⚂","⚃","⚄","⚅"];
   let ticks = 0;
@@ -288,12 +307,14 @@ function handleRoll() {
       setTimeout(() => {
         const token = document.getElementById(`token-${playerIdx}`);
         if (result.event === 'snake') {
+          soundSnake();
           animateAlongPath(token, snakePathMap[result.from], 700, playerIdx, () => {
             state.positions[name] = result.pos;
             positionToken(playerIdx);
             setTimeout(() => finishTurn(playerIdx, name, result.pos, rollBtn), 200);
           });
         } else {
+          soundLadder();
           animateAlongLine(token, result.from, result.pos, 600, playerIdx, () => {
             state.positions[name] = result.pos;
             positionToken(playerIdx);
@@ -340,6 +361,7 @@ function updatePanel() {
 // --- Win ---
 
 function showWin(winner) {
+  soundWin();
   state.phase = 'finished';
   document.getElementById('win-title').textContent = `🎉 ${winner} wins!`;
   const tbody = document.getElementById('summary-body');
