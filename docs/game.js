@@ -30,6 +30,24 @@ const state = {
   phase: 'setup'
 };
 
+function loadScores() { try{return JSON.parse(localStorage.getItem("snl-scores")||"[]");}catch{return[];} }
+function saveScore(name,turns) {
+  const scores=loadScores();
+  scores.push({name,turns});
+  scores.sort((a,b)=>a.turns-b.turns);
+  localStorage.setItem("snl-scores",JSON.stringify(scores.slice(0,5)));
+  renderLeaderboard();
+}
+function renderLeaderboard() {
+  const el=document.getElementById("leaderboard");
+  if(!el) return;
+  const scores=loadScores();
+  if(!scores.length){el.innerHTML='<p class="no-scores">No scores yet!</p>';return;}
+  el.innerHTML='<table class="score-table"><thead><tr><th>#</th><th>Player</th><th>Turns</th></tr></thead><tbody>'+
+    scores.map((s,i)=>'<tr'+(i===0?' class="top-score"':'')+"><td>"+(i+1)+"</td><td>"+s.name+"</td><td>"+s.turns+"</td></tr>").join('')+
+    '</tbody></table>';
+}
+
 // Stores SVG path elements indexed by snake-head square so animation can follow them
 const snakePathMap = {};
 
@@ -77,6 +95,7 @@ document.getElementById('start-btn').addEventListener('click', () => {
 });
 
 renderNameInputs();
+renderLeaderboard();
 
 // --- Board ---
 
@@ -361,6 +380,7 @@ function updatePanel() {
 // --- Win ---
 
 function showWin(winner) {
+  saveScore(winner, state.turns[winner]);
   soundWin();
   state.phase = 'finished';
   document.getElementById('win-title').textContent = `🎉 ${winner} wins!`;

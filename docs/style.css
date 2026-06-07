@@ -186,3 +186,11 @@ body {
   #board { --cell-size: clamp(26px, 7.5vw, 34px); }
   .cell .sq-num { font-size: 0.4rem; }
 }
+
+#leaderboard-section{margin-top:28px;}
+.lb-title{color:#888;font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;text-align:center;font-weight:normal;}
+.score-table{width:100%;border-collapse:collapse;font-size:0.82rem;}
+.score-table th{color:#555;font-weight:normal;padding:4px 8px;border-bottom:1px solid #2a2a4a;text-align:left;}
+.score-table td{padding:6px 8px;color:#bbb;border-bottom:1px solid #1a1a2e;}
+.score-table .top-score td{color:#ffd700;font-weight:bold;}
+.no-scores{color:#555;font-size:0.82rem;text-align:center;padding:10px 0;margin:0;}
