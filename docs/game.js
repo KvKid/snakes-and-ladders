@@ -49,6 +49,7 @@ document.getElementById('start-btn').addEventListener('click', () => {
   document.getElementById('game-screen').classList.add('active');
 
   buildBoard();
+  drawConnections();
   initTokens();
   updatePanel();
 });
@@ -62,6 +63,61 @@ function squareToGrid(sq) {
   const colInRow = (sq - 1) % 10;
   const col = (row % 2 === 0) ? colInRow : (9 - colInRow);
   return { gridCol: col + 1, gridRow: 10 - row };
+}
+
+function squareToCentre(sq) {
+  const { gridCol, gridRow } = squareToGrid(sq);
+  return { x: (gridCol - 0.5) * 56, y: (gridRow - 0.5) * 56 };
+}
+
+function drawConnections() {
+  const svg = document.getElementById('overlay');
+  // Remove any previously drawn connections (keep <defs>)
+  Array.from(svg.children).forEach(el => {
+    if (el.tagName !== 'defs') svg.removeChild(el);
+  });
+
+  const NS = 'http://www.w3.org/2000/svg';
+
+  // Draw snakes: red cubic bezier from head to tail
+  Object.entries(SNAKES).forEach(([head, tail]) => {
+    const from = squareToCentre(Number(head));
+    const to   = squareToCentre(Number(tail));
+
+    // Control points perpendicular to the line to create a visible curve
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const cx1 = from.x + dx * 0.25 + dy * 0.4;
+    const cy1 = from.y + dy * 0.25 - dx * 0.4;
+    const cx2 = from.x + dx * 0.75 - dy * 0.4;
+    const cy2 = from.y + dy * 0.75 + dx * 0.4;
+
+    const path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', `M${from.x},${from.y} C${cx1},${cy1} ${cx2},${cy2} ${to.x},${to.y}`);
+    path.setAttribute('stroke', '#e94560');
+    path.setAttribute('stroke-width', '2.5');
+    path.setAttribute('fill', 'none');
+    path.setAttribute('opacity', '0.85');
+    path.setAttribute('marker-end', 'url(#snake-arrow)');
+    svg.appendChild(path);
+  });
+
+  // Draw ladders: green straight line from bottom to top
+  Object.entries(LADDERS).forEach(([bottom, top]) => {
+    const from = squareToCentre(Number(bottom));
+    const to   = squareToCentre(Number(top));
+
+    const line = document.createElementNS(NS, 'line');
+    line.setAttribute('x1', from.x);
+    line.setAttribute('y1', from.y);
+    line.setAttribute('x2', to.x);
+    line.setAttribute('y2', to.y);
+    line.setAttribute('stroke', '#69f0ae');
+    line.setAttribute('stroke-width', '2.5');
+    line.setAttribute('opacity', '0.85');
+    line.setAttribute('marker-end', 'url(#ladder-arrow)');
+    svg.appendChild(line);
+  });
 }
 
 function buildBoard() {

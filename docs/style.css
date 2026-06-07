@@ -83,6 +83,15 @@ body {
 .cell.ladder-bottom { background: #1a3d1a; border-color: #006400; }
 .cell.ladder-bottom::after { content: '🪜'; font-size: 1.1rem; }
 
+/* SVG overlay */
+#overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
 /* Tokens */
 .token {
   position: absolute;
