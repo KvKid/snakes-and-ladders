@@ -59,11 +59,21 @@ def draw_board(positions, names):
         print(f"{PLAYER_SYMBOLS[i]}={name}  ", end="")
     print()
 
+def game_summary(names, turns, winner):
+    print("\n=== Game Summary ===")
+    print(f"Winner: {winner} 🎉")
+    print(f"{'Player':<15} {'Turns Taken'}")
+    print("-" * 28)
+    for name in names:
+        marker = " ← winner" if name == winner else ""
+        print(f"{name:<15} {turns[name]}{marker}")
+
 def play():
     print("=== Snakes and Ladders ===")
     num_players = int(input("How many players? (1-4): "))
     names = [input(f"Player {i+1} name: ") for i in range(num_players)]
     positions = {name: 0 for name in names}
+    turns = {name: 0 for name in names}
 
     draw_board(positions, names)
 
@@ -73,10 +83,12 @@ def play():
             roll = roll_dice()
             print(f"  Rolled a {roll}")
             positions[name] = move_player(positions[name], roll)
+            turns[name] += 1
             print(f"  {name} is now on square {positions[name]}")
             draw_board(positions, names)
             if positions[name] == 100:
                 print(f"\n🎉 {name} wins!")
+                game_summary(names, turns, name)
                 return
 
 if __name__ == "__main__":
