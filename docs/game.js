@@ -12,6 +12,9 @@ const state = {
   phase: 'setup'
 };
 
+// Stores SVG path elements indexed by snake-head square so animation can follow them
+const snakePathMap = {};
+
 // --- Setup screen ---
 
 let selectedCount = 1;
@@ -72,21 +75,16 @@ function squareToCentre(sq) {
 
 function drawConnections() {
   const svg = document.getElementById('overlay');
-  // Remove any previously drawn connections (keep <defs>)
   Array.from(svg.children).forEach(el => {
     if (el.tagName !== 'defs') svg.removeChild(el);
   });
 
   const NS = 'http://www.w3.org/2000/svg';
 
-  // Draw snakes: red cubic bezier from head to tail
   Object.entries(SNAKES).forEach(([head, tail]) => {
     const from = squareToCentre(Number(head));
     const to   = squareToCentre(Number(tail));
-
-    // Control points perpendicular to the line to create a visible curve
-    const dx = to.x - from.x;
-    const dy = to.y - from.y;
+    const dx = to.x - from.x, dy = to.y - from.y;
     const cx1 = from.x + dx * 0.25 + dy * 0.4;
     const cy1 = from.y + dy * 0.25 - dx * 0.4;
     const cx2 = from.x + dx * 0.75 - dy * 0.4;
@@ -100,18 +98,15 @@ function drawConnections() {
     path.setAttribute('opacity', '0.85');
     path.setAttribute('marker-end', 'url(#snake-arrow)');
     svg.appendChild(path);
+    snakePathMap[Number(head)] = path;
   });
 
-  // Draw ladders: green straight line from bottom to top
   Object.entries(LADDERS).forEach(([bottom, top]) => {
     const from = squareToCentre(Number(bottom));
     const to   = squareToCentre(Number(top));
-
     const line = document.createElementNS(NS, 'line');
-    line.setAttribute('x1', from.x);
-    line.setAttribute('y1', from.y);
-    line.setAttribute('x2', to.x);
-    line.setAttribute('y2', to.y);
+    line.setAttribute('x1', from.x); line.setAttribute('y1', from.y);
+    line.setAttribute('x2', to.x);   line.setAttribute('y2', to.y);
     line.setAttribute('stroke', '#69f0ae');
     line.setAttribute('stroke-width', '2.5');
     line.setAttribute('opacity', '0.85');
@@ -127,19 +122,15 @@ function buildBoard() {
     const cell = document.createElement('div');
     cell.className = 'cell';
     cell.id = `sq-${sq}`;
-
     const num = document.createElement('span');
     num.className = 'sq-num';
     num.textContent = sq;
     cell.appendChild(num);
-
     if (SNAKES[sq])  cell.classList.add('snake-head');
     if (LADDERS[sq]) cell.classList.add('ladder-bottom');
-
     const { gridCol, gridRow } = squareToGrid(sq);
     cell.style.gridColumn = gridCol;
     cell.style.gridRow = gridRow;
-
     board.appendChild(cell);
   }
 }
@@ -152,7 +143,6 @@ function initTokens() {
     token.style.background = PLAYER_COLOURS[i];
     token.textContent = PLAYER_SYMBOLS[i];
     token.style.display = 'flex';
-    // Start off-board (hidden off to side)
     token.style.top = '-40px';
     token.style.left = '-40px';
   });
@@ -163,24 +153,70 @@ function positionToken(playerIdx) {
   const sq = state.positions[name];
   const token = document.getElementById(`token-${playerIdx}`);
 
-  if (sq === 0) {
-    token.style.top = '-40px';
-    token.style.left = '-40px';
-    return;
-  }
+  if (sq === 0) { token.style.top = '-40px'; token.style.left = '-40px'; return; }
 
   const cell = document.getElementById(`sq-${sq}`);
   const boardWrapper = document.getElementById('board-wrapper');
   const cellRect = cell.getBoundingClientRect();
   const wrapperRect = boardWrapper.getBoundingClientRect();
-
-  // Offset tokens slightly so multiple on same square don't fully overlap
   const offset = playerIdx * 14;
-  const top = cellRect.top - wrapperRect.top + 4 + (offset % 28);
-  const left = cellRect.left - wrapperRect.left + 4 + Math.floor(offset / 28) * 14;
+  token.style.top  = `${cellRect.top  - wrapperRect.top  + 4 + (offset % 28)}px`;
+  token.style.left = `${cellRect.left - wrapperRect.left + 4 + Math.floor(offset / 28) * 14}px`;
+}
 
-  token.style.top = `${top}px`;
-  token.style.left = `${left}px`;
+// --- Path-following animation ---
+
+function easeInOut(t) {
+  return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+}
+
+// Animate token along an SVG path element using getPointAtLength
+function animateAlongPath(token, svgPath, duration, playerIdx, onComplete) {
+  const totalLength = svgPath.getTotalLength();
+  const start = performance.now();
+  const offset = playerIdx * 14;
+
+  token.style.transition = 'none';
+
+  function step(now) {
+    const t = Math.min((now - start) / duration, 1);
+    const point = svgPath.getPointAtLength(easeInOut(t) * totalLength);
+    token.style.left = `${point.x - 11 + Math.floor(offset / 28) * 14}px`;
+    token.style.top  = `${point.y - 11 + (offset % 28)}px`;
+    if (t < 1) {
+      requestAnimationFrame(step);
+    } else {
+      token.style.transition = '';
+      onComplete();
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+// Animate token linearly from one square to another (for ladders)
+function animateAlongLine(token, fromSq, toSq, duration, playerIdx, onComplete) {
+  const from = squareToCentre(fromSq);
+  const to   = squareToCentre(toSq);
+  const start = performance.now();
+  const offset = playerIdx * 14;
+
+  token.style.transition = 'none';
+
+  function step(now) {
+    const t = Math.min((now - start) / duration, 1);
+    const e = easeInOut(t);
+    const x = from.x + (to.x - from.x) * e;
+    const y = from.y + (to.y - from.y) * e;
+    token.style.left = `${x - 11 + Math.floor(offset / 28) * 14}px`;
+    token.style.top  = `${y - 11 + (offset % 28)}px`;
+    if (t < 1) {
+      requestAnimationFrame(step);
+    } else {
+      token.style.transition = '';
+      onComplete();
+    }
+  }
+  requestAnimationFrame(step);
 }
 
 // --- Game logic ---
@@ -191,7 +227,7 @@ function rollDice() {
 
 function movePlayer(position, roll) {
   const newPos = position + roll;
-  if (newPos > 100) return { pos: position, event: null };
+  if (newPos >= 100) return { pos: 100, event: null };   // landing on or past 100 wins
   if (SNAKES[newPos])  return { pos: SNAKES[newPos],  event: 'snake',  from: newPos };
   if (LADDERS[newPos]) return { pos: LADDERS[newPos], event: 'ladder', from: newPos };
   return { pos: newPos, event: null };
@@ -207,33 +243,56 @@ function handleRoll() {
   const rollBtn = document.getElementById('roll-btn');
   rollBtn.disabled = true;
 
-  const name = state.names[state.currentIdx];
+  const playerIdx = state.currentIdx;
+  const name = state.names[playerIdx];
   const roll = rollDice();
 
   document.getElementById('dice-result').textContent = DICE_FACES[roll];
 
   const result = movePlayer(state.positions[name], roll);
-  state.positions[name] = result.pos;
   state.turns[name]++;
-
   addLog(name, roll, result);
-  positionToken(state.currentIdx);
 
-  setTimeout(() => {
-    if (result.pos === 100) {
-      showWin(name);
-      return;
-    }
-    state.currentIdx = (state.currentIdx + 1) % state.names.length;
-    updatePanel();
-    rollBtn.disabled = false;
-  }, 380);
+  if (!result.event) {
+    // Normal move — CSS transition handles the slide
+    state.positions[name] = result.pos;
+    positionToken(playerIdx);
+    setTimeout(() => finishTurn(playerIdx, name, result.pos, rollBtn), 420);
+  } else {
+    // Phase 1: slide token to the snake head / ladder bottom
+    state.positions[name] = result.from;
+    positionToken(playerIdx);
+
+    // Phase 2: animate along the path after the CSS transition lands
+    setTimeout(() => {
+      const token = document.getElementById(`token-${playerIdx}`);
+      if (result.event === 'snake') {
+        animateAlongPath(token, snakePathMap[result.from], 700, playerIdx, () => {
+          state.positions[name] = result.pos;
+          positionToken(playerIdx);
+          setTimeout(() => finishTurn(playerIdx, name, result.pos, rollBtn), 200);
+        });
+      } else {
+        animateAlongLine(token, result.from, result.pos, 600, playerIdx, () => {
+          state.positions[name] = result.pos;
+          positionToken(playerIdx);
+          setTimeout(() => finishTurn(playerIdx, name, result.pos, rollBtn), 200);
+        });
+      }
+    }, 440);
+  }
+}
+
+function finishTurn(playerIdx, name, finalPos, rollBtn) {
+  if (finalPos >= 100) { showWin(name); return; }
+  state.currentIdx = (state.currentIdx + 1) % state.names.length;
+  updatePanel();
+  rollBtn.disabled = false;
 }
 
 function addLog(name, roll, result) {
   const log = document.getElementById('move-log');
   const li = document.createElement('li');
-
   let text = `${name} rolled ${roll} → square ${result.pos}`;
   if (result.event === 'snake') {
     text = `${name} rolled ${roll} — snake at ${result.from}! Back to ${result.pos}`;
@@ -242,7 +301,6 @@ function addLog(name, roll, result) {
     text = `${name} rolled ${roll} — ladder at ${result.from}! Up to ${result.pos}`;
     li.classList.add('ladder');
   }
-
   li.textContent = text;
   log.insertBefore(li, log.firstChild);
 }
@@ -253,8 +311,8 @@ function updatePanel() {
   const name = state.names[state.currentIdx];
   const colour = PLAYER_COLOURS[state.currentIdx];
   const symbol = PLAYER_SYMBOLS[state.currentIdx];
-  const indicator = document.getElementById('turn-indicator');
-  indicator.innerHTML = `<span style="color:${colour}; font-size:1.2rem">${symbol}</span>  <strong>${name}</strong>'s turn`;
+  document.getElementById('turn-indicator').innerHTML =
+    `<span style="color:${colour}; font-size:1.2rem">${symbol}</span>  <strong>${name}</strong>'s turn`;
 }
 
 // --- Win ---
@@ -262,7 +320,6 @@ function updatePanel() {
 function showWin(winner) {
   state.phase = 'finished';
   document.getElementById('win-title').textContent = `🎉 ${winner} wins!`;
-
   const tbody = document.getElementById('summary-body');
   tbody.innerHTML = '';
   state.names.forEach(name => {
@@ -271,6 +328,5 @@ function showWin(winner) {
     tr.innerHTML = `<td>${name}${name === winner ? ' 🏆' : ''}</td><td>${state.turns[name]}</td>`;
     tbody.appendChild(tr);
   });
-
   document.getElementById('win-overlay').classList.remove('hidden');
 }
