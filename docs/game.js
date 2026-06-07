@@ -236,6 +236,29 @@ function movePlayer(position, roll) {
 
 document.getElementById('roll-btn').addEventListener('click', handleRoll);
 
+function animateDice(finalFace, callback) {
+  const el = document.getElementById("dice-result");
+  const faces = ["⚀","⚁","⚂","⚃","⚄","⚅"];
+  let ticks = 0;
+  const iv = setInterval(() => {
+    el.classList.remove("dice-pop");
+    void el.offsetWidth;
+    el.textContent = faces[Math.floor(ticks * 7 % 6)];
+    el.classList.add("dice-pop");
+    ticks++;
+    if (ticks >= 8) {
+      clearInterval(iv);
+      setTimeout(() => {
+        el.classList.remove("dice-pop");
+        void el.offsetWidth;
+        el.textContent = finalFace;
+        el.classList.add("dice-pop");
+        callback();
+      }, 80);
+    }
+  }, 60);
+}
+
 function handleRoll() {
   if (state.phase !== 'playing') return;
 
@@ -246,40 +269,40 @@ function handleRoll() {
   const name = state.names[playerIdx];
   const roll = rollDice();
 
-  document.getElementById('dice-result').textContent = DICE_FACES[roll];
+  animateDice(DICE_FACES[roll], () => {
+    const result = movePlayer(state.positions[name], roll);
+    state.turns[name]++;
+    addLog(name, roll, result);
 
-  const result = movePlayer(state.positions[name], roll);
-  state.turns[name]++;
-  addLog(name, roll, result);
+    if (!result.event) {
+      // Normal move — CSS transition handles the slide
+      state.positions[name] = result.pos;
+      positionToken(playerIdx);
+      setTimeout(() => finishTurn(playerIdx, name, result.pos, rollBtn), 420);
+    } else {
+      // Phase 1: slide token to the snake head / ladder bottom
+      state.positions[name] = result.from;
+      positionToken(playerIdx);
 
-  if (!result.event) {
-    // Normal move — CSS transition handles the slide
-    state.positions[name] = result.pos;
-    positionToken(playerIdx);
-    setTimeout(() => finishTurn(playerIdx, name, result.pos, rollBtn), 420);
-  } else {
-    // Phase 1: slide token to the snake head / ladder bottom
-    state.positions[name] = result.from;
-    positionToken(playerIdx);
-
-    // Phase 2: animate along the path after the CSS transition lands
-    setTimeout(() => {
-      const token = document.getElementById(`token-${playerIdx}`);
-      if (result.event === 'snake') {
-        animateAlongPath(token, snakePathMap[result.from], 700, playerIdx, () => {
-          state.positions[name] = result.pos;
-          positionToken(playerIdx);
-          setTimeout(() => finishTurn(playerIdx, name, result.pos, rollBtn), 200);
-        });
-      } else {
-        animateAlongLine(token, result.from, result.pos, 600, playerIdx, () => {
-          state.positions[name] = result.pos;
-          positionToken(playerIdx);
-          setTimeout(() => finishTurn(playerIdx, name, result.pos, rollBtn), 200);
-        });
-      }
-    }, 440);
-  }
+      // Phase 2: animate along the path after the CSS transition lands
+      setTimeout(() => {
+        const token = document.getElementById(`token-${playerIdx}`);
+        if (result.event === 'snake') {
+          animateAlongPath(token, snakePathMap[result.from], 700, playerIdx, () => {
+            state.positions[name] = result.pos;
+            positionToken(playerIdx);
+            setTimeout(() => finishTurn(playerIdx, name, result.pos, rollBtn), 200);
+          });
+        } else {
+          animateAlongLine(token, result.from, result.pos, 600, playerIdx, () => {
+            state.positions[name] = result.pos;
+            positionToken(playerIdx);
+            setTimeout(() => finishTurn(playerIdx, name, result.pos, rollBtn), 200);
+          });
+        }
+      }, 440);
+    }
+  });
 }
 
 function finishTurn(playerIdx, name, finalPos, rollBtn) {
