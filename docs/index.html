@@ -51,14 +51,19 @@
         <div class="token" id="token-3"></div>
       </div>
       <div id="panel">
+        <div id="player-roster"></div>
         <div id="turn-indicator"></div>
         <button id="roll-btn">Roll Dice</button>
-        <div id="dice-result"></div>
+        <div id="roll-hint"><kbd>Space</kbd> or click to roll</div>
+        <div id="dice-result" class="placeholder">🎲</div>
         <div id="log-title">Move Log</div>
         <ul id="move-log"></ul>
       </div>
     </div>
   </div>
+
+  <!-- Confetti (drawn on win) -->
+  <canvas id="confetti" class="hidden"></canvas>
 
   <!-- Win Overlay -->
   <div id="win-overlay" class="hidden">

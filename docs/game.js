@@ -22,6 +22,16 @@ function soundSnake() { [440,392,349,311,277].forEach((f,i)=>playTone(f,'sawtoot
 function soundLadder() { [261,329,392,523].forEach((f,i)=>playTone(f,'sine',0.18,0.22,i*0.09)); }
 function soundWin() { [523,659,784,1047,1568].forEach((f,i)=>playTone(f,'sine',0.35,0.3,i*0.12)); }
 
+// Haptics — paired with each sound so every event lands across senses at once.
+const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function haptic(pattern) { try { if (navigator.vibrate) navigator.vibrate(pattern); } catch(e) {} }
+const HAPTIC = {
+  roll:   12,                 // a single crisp tick as the dice tumbles
+  ladder: [18, 30, 18],       // light, lifting taps
+  snake:  [55, 35, 55, 35],   // heavier, sinking buzz
+  win:    [70, 40, 70, 40, 160]
+};
+
 const state = {
   names: [],
   positions: {},
@@ -77,7 +87,8 @@ function renderNameInputs() {
   }
 }
 
-document.getElementById('start-btn').addEventListener('click', () => {
+function startGame() {
+  if (state.phase === 'playing') return;
   const inputs = document.querySelectorAll('#name-inputs input');
   state.names = Array.from(inputs).map(el => el.value.trim() || el.placeholder);
   state.names.forEach(name => { state.positions[name] = 0; state.turns[name] = 0; });
@@ -91,8 +102,11 @@ document.getElementById('start-btn').addEventListener('click', () => {
   const boardEl=document.getElementById("board"); const svg=document.getElementById("overlay"); const sz=boardEl.offsetWidth; svg.setAttribute("width",sz); svg.setAttribute("height",sz);
   drawConnections();
   initTokens();
+  buildRoster();
   updatePanel();
-});
+}
+
+document.getElementById('start-btn').addEventListener('click', startGame);
 
 renderNameInputs();
 renderLeaderboard();
@@ -275,7 +289,9 @@ document.getElementById('roll-btn').addEventListener('click', handleRoll);
 
 function animateDice(finalFace, callback) {
   soundDiceRoll();
+  haptic(HAPTIC.roll);
   const el = document.getElementById("dice-result");
+  el.classList.remove("placeholder");
   const faces = ["⚀","⚁","⚂","⚃","⚄","⚅"];
   let ticks = 0;
   const iv = setInterval(() => {
@@ -327,6 +343,7 @@ function handleRoll() {
         const token = document.getElementById(`token-${playerIdx}`);
         if (result.event === 'snake') {
           soundSnake();
+          haptic(HAPTIC.snake);
           animateAlongPath(token, snakePathMap[result.from], 700, playerIdx, () => {
             state.positions[name] = result.pos;
             positionToken(playerIdx);
@@ -334,6 +351,7 @@ function handleRoll() {
           });
         } else {
           soundLadder();
+          haptic(HAPTIC.ladder);
           animateAlongLine(token, result.from, result.pos, 600, playerIdx, () => {
             state.positions[name] = result.pos;
             positionToken(playerIdx);
@@ -369,12 +387,53 @@ function addLog(name, roll, result) {
 
 // --- Panel ---
 
+function buildRoster() {
+  const el = document.getElementById('player-roster');
+  el.innerHTML = '';
+  state.names.forEach((name, i) => {
+    const row = document.createElement('div');
+    row.className = 'roster-row';
+    row.id = `roster-${i}`;
+    row.innerHTML =
+      `<span class="roster-symbol" style="color:${PLAYER_COLOURS[i]}">${PLAYER_SYMBOLS[i]}</span>` +
+      `<span class="roster-name">${name}</span>` +
+      `<span class="roster-turn">Now</span>` +
+      `<span class="roster-pos" id="roster-pos-${i}">${state.positions[name]}</span>`;
+    el.appendChild(row);
+  });
+}
+
+function updateRoster() {
+  state.names.forEach((name, i) => {
+    const row = document.getElementById(`roster-${i}`);
+    if (!row) return;
+    document.getElementById(`roster-pos-${i}`).textContent = state.positions[name];
+    row.classList.toggle('active', i === state.currentIdx);
+  });
+}
+
+// Glow the active player's token in their own colour so it's easy to find.
+function highlightActiveToken() {
+  state.names.forEach((_, i) => {
+    const token = document.getElementById(`token-${i}`);
+    if (!token) return;
+    if (i === state.currentIdx) {
+      token.style.setProperty('--glow', PLAYER_COLOURS[i]);
+      token.classList.add('active-token');
+    } else {
+      token.classList.remove('active-token');
+    }
+  });
+}
+
 function updatePanel() {
   const name = state.names[state.currentIdx];
   const colour = PLAYER_COLOURS[state.currentIdx];
   const symbol = PLAYER_SYMBOLS[state.currentIdx];
   document.getElementById('turn-indicator').innerHTML =
     `<span style="color:${colour}; font-size:1.2rem">${symbol}</span>  <strong>${name}</strong>'s turn`;
+  updateRoster();
+  highlightActiveToken();
 }
 
 // --- Win ---
@@ -382,6 +441,8 @@ function updatePanel() {
 function showWin(winner) {
   saveScore(winner, state.turns[winner]);
   soundWin();
+  haptic(HAPTIC.win);
+  launchConfetti();
   state.phase = 'finished';
   document.getElementById('win-title').textContent = `🎉 ${winner} wins!`;
   const tbody = document.getElementById('summary-body');
@@ -396,3 +457,63 @@ function showWin(winner) {
 }
 
 window.addEventListener("resize",()=>{ if(state.phase!=="playing")return; const sz=document.getElementById("board").offsetWidth; const svg=document.getElementById("overlay"); svg.setAttribute("width",sz); svg.setAttribute("height",sz); drawConnections(); state.names.forEach((_,i)=>positionToken(i)); });
+
+// --- Confetti (win celebration) ---
+// Particles are tinted with the player colours + gold so the burst matches
+// the game's palette rather than being a generic rainbow.
+function launchConfetti() {
+  const canvas = document.getElementById('confetti');
+  if (reduceMotion) return;  // honour reduced-motion preference
+  canvas.classList.remove('hidden');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width = window.innerWidth;
+  const H = canvas.height = window.innerHeight;
+  const colours = PLAYER_COLOURS.concat(['#ffd700']);
+  const pieces = Array.from({ length: 140 }, () => ({
+    x: Math.random() * W,
+    y: -20 - Math.random() * H * 0.5,
+    r: 4 + Math.random() * 5,
+    c: colours[Math.floor(Math.random() * colours.length)],
+    vy: 2 + Math.random() * 3.5,
+    vx: -1.5 + Math.random() * 3,
+    rot: Math.random() * Math.PI,
+    vr: -0.2 + Math.random() * 0.4
+  }));
+
+  const end = performance.now() + 2600;
+  function frame(now) {
+    ctx.clearRect(0, 0, W, H);
+    pieces.forEach(p => {
+      p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.c;
+      ctx.fillRect(-p.r / 2, -p.r / 2, p.r, p.r * 1.6);
+      ctx.restore();
+    });
+    if (now < end) {
+      requestAnimationFrame(frame);
+    } else {
+      ctx.clearRect(0, 0, W, H);
+      canvas.classList.add('hidden');
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+// --- Keyboard controls ---
+document.addEventListener('keydown', (e) => {
+  if (state.phase === 'setup') {
+    // Enter from anywhere on the setup screen starts the game.
+    if (e.key === 'Enter') { e.preventDefault(); startGame(); }
+    return;
+  }
+  if (state.phase === 'playing' && (e.code === 'Space' || e.key === 'Enter')) {
+    const rollBtn = document.getElementById('roll-btn');
+    // If the button already has focus, let its native click fire (avoids a double roll).
+    if (document.activeElement === rollBtn) return;
+    e.preventDefault();
+    if (!rollBtn.disabled) handleRoll();
+  }
+});
