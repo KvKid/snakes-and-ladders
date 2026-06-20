@@ -198,12 +198,10 @@ function initTokens() {
   });
 }
 
-function positionToken(playerIdx) {
-  const name = state.names[playerIdx];
-  const sq = state.positions[name];
+// Place a token at an explicit square (0 / off-board = parked off the corner).
+function placeTokenAtSquare(playerIdx, sq) {
   const token = document.getElementById(`token-${playerIdx}`);
-
-  if (sq === 0) { token.style.top = '-40px'; token.style.left = '-40px'; return; }
+  if (sq <= 0) { token.style.top = '-40px'; token.style.left = '-40px'; return; }
 
   const cell = document.getElementById(`sq-${sq}`);
   const boardWrapper = document.getElementById('board-wrapper');
@@ -212,6 +210,38 @@ function positionToken(playerIdx) {
   const offset = playerIdx * 14;
   token.style.top  = `${cellRect.top  - wrapperRect.top  + 4 + (offset % 28)}px`;
   token.style.left = `${cellRect.left - wrapperRect.left + 4 + Math.floor(offset / 28) * 14}px`;
+}
+
+function positionToken(playerIdx) {
+  placeTokenAtSquare(playerIdx, state.positions[state.names[playerIdx]]);
+}
+
+// Walk a token one square at a time (fromSq -> toSq) so it traces the
+// numbered serpentine path instead of cutting diagonally across the board.
+function animateWalk(playerIdx, fromSq, toSq, onComplete) {
+  const token = document.getElementById(`token-${playerIdx}`);
+
+  if (reduceMotion || toSq <= fromSq) {
+    placeTokenAtSquare(playerIdx, toSq);
+    setTimeout(onComplete, reduceMotion ? 0 : 120);
+    return;
+  }
+
+  const stepDur = 120; // ms per square hop
+  token.style.transition = `top ${stepDur}ms ease, left ${stepDur}ms ease`;
+  let sq = fromSq;
+
+  function stepNext() {
+    if (sq >= toSq) {
+      token.style.transition = '';
+      onComplete();
+      return;
+    }
+    sq++;
+    placeTokenAtSquare(playerIdx, sq);
+    setTimeout(stepNext, stepDur);
+  }
+  stepNext();
 }
 
 // --- Path-following animation ---
@@ -324,22 +354,20 @@ function handleRoll() {
   const roll = rollDice();
 
   animateDice(DICE_FACES[roll], () => {
-    const result = movePlayer(state.positions[name], roll);
+    const fromSq = state.positions[name];
+    const result = movePlayer(fromSq, roll);
     state.turns[name]++;
     addLog(name, roll, result);
 
     if (!result.event) {
-      // Normal move — CSS transition handles the slide
+      // Normal move — walk square by square along the numbered path.
       state.positions[name] = result.pos;
-      positionToken(playerIdx);
-      setTimeout(() => finishTurn(playerIdx, name, result.pos, rollBtn), 420);
+      animateWalk(playerIdx, fromSq, result.pos, () => finishTurn(playerIdx, name, result.pos, rollBtn));
     } else {
-      // Phase 1: slide token to the snake head / ladder bottom
+      // Phase 1: walk up to the snake head / ladder bottom following the path.
       state.positions[name] = result.from;
-      positionToken(playerIdx);
-
-      // Phase 2: animate along the path after the CSS transition lands
-      setTimeout(() => {
+      animateWalk(playerIdx, fromSq, result.from, () => {
+        // Phase 2: animate down the snake / up the ladder.
         const token = document.getElementById(`token-${playerIdx}`);
         if (result.event === 'snake') {
           soundSnake();
@@ -358,7 +386,7 @@ function handleRoll() {
             setTimeout(() => finishTurn(playerIdx, name, result.pos, rollBtn), 200);
           });
         }
-      }, 440);
+      });
     }
   });
 }
